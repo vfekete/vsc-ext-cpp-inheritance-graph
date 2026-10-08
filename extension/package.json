@@ -1,0 +1,325 @@
+{
+  "name": "cpp-inheritance-graph",
+  "displayName": "C++ Inheritance Graph",
+  "description": "Interactive, theme-aware visualization of C++ class inheritance for a header file or a whole directory.",
+  "version": "0.6.0",
+  "publisher": "local",
+  "license": "MIT",
+  "author": "Vladimir Fekete",
+  "homepage": "https://github.com/vfekete/vsc-ext-cpp-inheritance-graph#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vfekete/vsc-ext-cpp-inheritance-graph.git",
+    "directory": "extension"
+  },
+  "bugs": {
+    "url": "https://github.com/vfekete/vsc-ext-cpp-inheritance-graph/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "c++",
+    "cpp",
+    "inheritance",
+    "class diagram",
+    "uml",
+    "clang-uml"
+  ],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "onWebviewPanel:cppInheritanceGraph"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "cppInheritanceGraph.showForFile",
+        "title": "Show C++ Inheritance Graph for File",
+        "category": "C++ Inheritance",
+        "icon": "$(type-hierarchy-super)"
+      },
+      {
+        "command": "cppInheritanceGraph.showForFolder",
+        "title": "Show C++ Inheritance Graph for Folder",
+        "category": "C++ Inheritance",
+        "icon": "$(type-hierarchy-super)"
+      },
+      {
+        "command": "cppInheritanceGraph.clearCache",
+        "title": "Clear Parser Cache",
+        "category": "C++ Inheritance"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "cppInheritanceGraph.showForFile",
+          "when": "editorLangId == cpp || editorLangId == c || editorLangId == cuda-cpp"
+        },
+        {
+          "command": "cppInheritanceGraph.showForFolder",
+          "when": "false"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "cppInheritanceGraph.showForFile",
+          "when": "editorLangId == cpp || editorLangId == c || editorLangId == cuda-cpp",
+          "group": "navigation@90"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "cppInheritanceGraph.showForFile",
+          "when": "editorLangId == cpp || editorLangId == cuda-cpp",
+          "group": "navigation@90"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "cppInheritanceGraph.showForFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@90"
+        },
+        {
+          "command": "cppInheritanceGraph.showForFile",
+          "when": "!explorerResourceIsFolder && resourceExtname =~ /^\\.(h|hh|hpp|hxx|h\\+\\+|inl|ipp|tpp|cpp|cc|cxx|c\\+\\+|cu|cuh)$/i",
+          "group": "navigation@90"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "C++ Inheritance Graph",
+      "properties": {
+        "cppInheritanceGraph.headerExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".h",
+            ".hh",
+            ".hpp",
+            ".hxx",
+            ".h++",
+            ".inl",
+            ".ipp",
+            ".tpp",
+            ".cuh"
+          ],
+          "description": "File extensions treated as headers when scanning a folder."
+        },
+        "cppInheritanceGraph.folder.recursive": {
+          "type": "boolean",
+          "default": true,
+          "description": "When showing the graph for a folder, also include headers in its sub-folders."
+        },
+        "cppInheritanceGraph.traversalScope": {
+          "type": "string",
+          "enum": [
+            "workspace",
+            "includePaths",
+            "targetDirectory"
+          ],
+          "enumDescriptions": [
+            "Follow base classes defined anywhere in the open workspace folders (plus additionalScopeRoots).",
+            "Like 'workspace', and also follow into every non-system include directory.",
+            "Only follow base classes defined inside the selected folder (or the directory of the selected file)."
+          ],
+          "default": "workspace",
+          "description": "Base classes defined outside this scope are shown as external leaves and not expanded further."
+        },
+        "cppInheritanceGraph.additionalScopeRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra directories whose classes are expanded like workspace classes. Supports ${workspaceFolder}."
+        },
+        "cppInheritanceGraph.includePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional include directories (on top of c_cpp_properties.json, compile_commands.json and C_Cpp.default.includePath). Supports ${workspaceFolder} and a trailing /** for recursive search."
+        },
+        "cppInheritanceGraph.defines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional preprocessor definitions, e.g. \"MY_FEATURE=1\"."
+        },
+        "cppInheritanceGraph.compileCommands": {
+          "type": "string",
+          "default": "",
+          "description": "Path to compile_commands.json (or its directory). When empty, common build directories are searched and C_Cpp.default.compileCommands is used."
+        },
+        "cppInheritanceGraph.fuzzyIncludeResolution": {
+          "type": "boolean",
+          "default": true,
+          "description": "If an #include cannot be resolved through the include paths, look for a header with a matching path suffix anywhere in the scope roots."
+        },
+        "cppInheritanceGraph.externalNamespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "std",
+            "boost",
+            "__gnu_cxx",
+            "Qt"
+          ],
+          "description": "Namespaces whose types are always treated as external leaves (traversal stops there)."
+        },
+        "cppInheritanceGraph.maxDepth": {
+          "type": "number",
+          "default": 64,
+          "description": "Maximum number of inheritance levels to follow upwards from the starting classes."
+        },
+        "cppInheritanceGraph.languageServer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask the active C++ language server (Microsoft C/C++ IntelliSense, clangd, ...) to resolve base classes the built-in parser could not find (go-to-definition), and to report supertypes when it supports type hierarchy."
+        },
+        "cppInheritanceGraph.languageServer.timeoutMs": {
+          "type": "number",
+          "default": 4000,
+          "description": "Timeout for a single language-server request."
+        },
+        "cppInheritanceGraph.clangUml.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Use clang-uml when the executable is found; silently fall back to the built-in parser on failure.",
+            "Always use clang-uml and report an error if it fails.",
+            "Never use clang-uml."
+          ],
+          "default": "auto",
+          "description": "Use clang-uml (compiler-accurate: macros, templates, hidden includes) to gather inheritance information."
+        },
+        "cppInheritanceGraph.clangUml.path": {
+          "type": "string",
+          "default": "clang-uml",
+          "description": "Path to the clang-uml executable."
+        },
+        "cppInheritanceGraph.clangUml.timeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "description": "Timeout for one clang-uml run."
+        },
+        "cppInheritanceGraph.clangUml.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra compiler flags passed to clang-uml for the synthetic translation unit (e.g. \"-std=c++20\")."
+        },
+        "cppInheritanceGraph.cppStandard": {
+          "type": "string",
+          "default": "",
+          "description": "C++ standard for clang-uml (e.g. c++20). Empty: taken from compile_commands.json / c_cpp_properties.json, else c++17."
+        },
+        "cppInheritanceGraph.navigateOn": {
+          "type": "string",
+          "enum": [
+            "doubleClick",
+            "click"
+          ],
+          "default": "doubleClick",
+          "description": "In the graph, which mouse action jumps to the clicked class / method / field declaration. A single click always selects and highlights. Ctrl/Cmd+click always navigates."
+        },
+        "cppInheritanceGraph.showMembers": {
+          "type": "string",
+          "enum": [
+            "all",
+            "public",
+            "none"
+          ],
+          "default": "all",
+          "description": "Initial member visibility in the graph."
+        },
+        "cppInheritanceGraph.relations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "inheritance",
+              "realization",
+              "composition",
+              "aggregation",
+              "association",
+              "dependency"
+            ],
+            "enumDescriptions": [
+              "Generalization: derived class to base class (solid line, hollow triangle).",
+              "Realization: inheritance from an interface, i.e. only pure virtual methods and no data (dashed line, hollow triangle).",
+              "Composition: member by value, unique_ptr, optional, containers of values (filled diamond at the owner).",
+              "Aggregation: shared_ptr, containers of pointers (hollow diamond at the owner).",
+              "Association: raw pointer / reference members, weak_ptr (open arrow).",
+              "Dependency: class used only in method parameters or return types (dashed, open arrow)."
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "inheritance"
+          ],
+          "description": "UML relationships shown when a graph opens. They can be toggled in the graph's Relations menu."
+        },
+        "cppInheritanceGraph.standaloneClasses": {
+          "type": "string",
+          "enum": [
+            "namespace",
+            "folder",
+            "inline",
+            "hidden"
+          ],
+          "enumDescriptions": [
+            "Collect classes without any inheritance relation into collapsible groups per namespace.",
+            "Collect them into collapsible groups per source folder.",
+            "Show them as individual boxes packed into a grid below the hierarchies.",
+            "Do not show them."
+          ],
+          "default": "namespace",
+          "description": "How classes that neither derive from anything nor are derived from (in the current graph) are shown. Groups with more than 8 classes start collapsed."
+        },
+        "cppInheritanceGraph.layoutDirection": {
+          "type": "string",
+          "enum": [
+            "TB",
+            "LR"
+          ],
+          "default": "TB",
+          "description": "Initial layout direction: base classes on top (TB) or on the left (LR)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "npm run compile && node --test \"out/test/**/*.test.js\"",
+    "package": "npm run compile && vsce package --out dist/",
+    "deploy": "bash scripts/deploy.sh",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "~1.85.0",
+    "@vscode/vsce": "^4.0.0",
+    "typescript": "^5.6.0"
+  }
+}

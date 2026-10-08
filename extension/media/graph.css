@@ -1,0 +1,329 @@
+/*
+ * All colours come from the active VS Code theme (CSS variables injected into webviews),
+ * with fallbacks. Semantic roles are mapped to theme tokens that every theme defines
+ * with sufficient contrast against the editor background.
+ */
+:root {
+    --bg: var(--vscode-editor-background, #1e1e1e);
+    --fg: var(--vscode-editor-foreground, #d4d4d4);
+    --muted: var(--vscode-descriptionForeground, #9d9d9d);
+    --node-bg: var(--vscode-editorWidget-background, #252526);
+    --node-header-bg: var(--vscode-sideBarSectionHeader-background, var(--vscode-editorWidget-background, #2d2d30));
+    --node-border: var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
+    --seed-border: var(--vscode-textLink-foreground, #3794ff);
+    --edge: var(--vscode-editorLineNumber-foreground, #858585);
+    --edge-parent: var(--vscode-charts-orange, #d18616);
+    --edge-child: var(--vscode-terminal-ansiCyan, #29b8db);
+    /* One theme chart colour per UML relationship kind. */
+    --rel-realization: var(--vscode-charts-purple, #b180d7);
+    --rel-composition: var(--vscode-charts-red, #f14c4c);
+    --rel-aggregation: var(--vscode-charts-yellow, #cca700);
+    --rel-association: var(--vscode-charts-green, #89d185);
+    --rel-dependency: var(--vscode-charts-blue, #3794ff);
+    --selected: var(--vscode-focusBorder, #007fd4);
+    --match: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33));
+    --hover-row: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
+    --method: var(--vscode-symbolIcon-methodForeground, #b180d7);
+    --field: var(--vscode-symbolIcon-fieldForeground, #75beff);
+    --ctor: var(--vscode-symbolIcon-constructorForeground, #b180d7);
+    --class-icon: var(--vscode-symbolIcon-classForeground, #ee9d28);
+    --external: var(--vscode-disabledForeground, #8c8c8c);
+    --error: var(--vscode-editorError-foreground, #f14c4c);
+    --toolbar-bg: var(--vscode-editorWidget-background, #252526);
+    --input-bg: var(--vscode-input-background, #3c3c3c);
+    --input-fg: var(--vscode-input-foreground, #cccccc);
+    --input-border: var(--vscode-input-border, transparent);
+    --button-bg: var(--vscode-button-secondaryBackground, #3a3d41);
+    --button-fg: var(--vscode-button-secondaryForeground, #cccccc);
+    --button-hover: var(--vscode-button-secondaryHoverBackground, #45494e);
+    --code-font: var(--vscode-editor-font-family, Consolas, 'Courier New', monospace);
+    --ui-font: var(--vscode-font-family, system-ui, sans-serif);
+    --shadow: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--ui-font);
+    font-size: var(--vscode-font-size, 13px);
+}
+
+#app { display: flex; flex-direction: column; height: 100%; }
+
+/* ---------------------------------------------------------------- toolbar */
+#toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    padding: 6px 8px;
+    background: var(--toolbar-bg);
+    border-bottom: 1px solid var(--node-border);
+    box-shadow: 0 1px 4px var(--shadow);
+    z-index: 2;
+}
+#toolbar .title {
+    font-weight: 600;
+    margin-right: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 28ch;
+}
+#toolbar .sep { width: 1px; align-self: stretch; background: var(--node-border); margin: 0 2px; }
+#toolbar .spacer { flex: 1; }
+button, select, input {
+    font: inherit;
+    color: var(--button-fg);
+    background: var(--button-bg);
+    border: 1px solid var(--vscode-button-border, transparent);
+    border-radius: 2px;
+    padding: 2px 8px;
+    min-height: 24px;
+}
+button { cursor: pointer; }
+button:hover { background: var(--button-hover); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 1px solid var(--selected); outline-offset: 1px; }
+button.icon { min-width: 26px; padding: 2px 6px; }
+button[aria-pressed="true"] { outline: 1px solid var(--selected); }
+select { background: var(--vscode-dropdown-background, var(--input-bg)); color: var(--vscode-dropdown-foreground, var(--input-fg)); border-color: var(--vscode-dropdown-border, var(--input-border)); }
+input[type="search"] {
+    background: var(--input-bg);
+    color: var(--input-fg);
+    border-color: var(--input-border);
+    width: 16ch;
+}
+input::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted)); }
+label.inline { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+
+/* ---------------------------------------------------------------- canvas */
+#stage { position: relative; flex: 1; min-height: 0; }
+#canvas { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; touch-action: none; }
+#canvas.panning { cursor: grabbing; }
+
+#statusbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 3px 8px;
+    font-size: 0.92em;
+    color: var(--muted);
+    border-top: 1px solid var(--node-border);
+    background: var(--toolbar-bg);
+    white-space: nowrap;
+    overflow: hidden;
+}
+#statusbar .zoom { margin-left: auto; font-variant-numeric: tabular-nums; }
+#statusbar button { min-height: 18px; padding: 0 6px; font-size: inherit; }
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    color: var(--muted);
+    font-size: 1.1em;
+}
+.overlay[hidden] { display: none; }
+.overlay.error { color: var(--error); white-space: pre-wrap; padding: 24px; text-align: center; }
+.spinner {
+    width: 16px; height: 16px; margin-right: 10px;
+    border: 2px solid var(--node-border); border-top-color: var(--selected);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#panel {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    max-width: min(520px, calc(100% - 40px));
+    max-height: calc(100% - 40px);
+    overflow: auto;
+    background: var(--vscode-editorHoverWidget-background, var(--node-bg));
+    color: var(--vscode-editorHoverWidget-foreground, var(--fg));
+    border: 1px solid var(--vscode-editorHoverWidget-border, var(--node-border));
+    box-shadow: 0 2px 8px var(--shadow);
+    padding: 10px 14px;
+    font-size: 0.95em;
+    z-index: 3;
+}
+#panel[hidden] { display: none; }
+#panel h3 { margin: 4px 0 6px; font-size: 1em; }
+#panel ul { margin: 0 0 8px; padding-left: 18px; }
+#panel li { margin: 2px 0; word-break: break-word; }
+#panel .legend { display: grid; grid-template-columns: 54px 1fr; gap: 6px 10px; align-items: center; }
+#panel code { font-family: var(--code-font); }
+
+/* ---------------------------------------------------------------- graph */
+.node { cursor: pointer; }
+.node .bg { fill: var(--node-bg); }
+.node .box {
+    fill: none;
+    stroke: var(--node-border);
+    stroke-width: 1;
+    pointer-events: none;
+}
+.node .header { fill: var(--node-header-bg); }
+.node .divider { stroke: var(--node-border); stroke-width: 1; }
+.node text { fill: var(--fg); font-family: var(--code-font); dominant-baseline: middle; }
+.node .name { font-weight: 700; }
+.node .name.abstract { font-style: italic; }
+.node .ns, .node .stereo, .node .reason, .node .more { fill: var(--muted); }
+.node .more { font-style: italic; }
+.node .chevron { fill: var(--muted); }
+.node .chevron-hit { fill: transparent; }
+.node .chevron-hit:hover + .chevron, .node .chevron:hover { fill: var(--fg); }
+.node .class-icon { fill: var(--class-icon); }
+
+.node.seed .box { stroke: var(--seed-border); stroke-width: 2; }
+.node.external .box, .node.unresolved .box, .node.templateParam .box, .node.outside .box { stroke-dasharray: 5 3; }
+.node.external .bg, .node.unresolved .bg, .node.templateParam .bg, .node.outside .bg { fill: var(--bg); }
+.node.external text, .node.outside text, .node.templateParam text { fill: var(--external); }
+.node.unresolved .name { fill: var(--error); }
+.node.external .header, .node.outside .header, .node.unresolved .header, .node.templateParam .header { fill: transparent; }
+
+.row .row-bg { fill: transparent; }
+.row:hover .row-bg { fill: var(--hover-row); }
+.row .vis { fill: var(--muted); }
+.row .icon.method { fill: var(--method); }
+.row .icon.field { fill: var(--field); }
+.row .icon.ctor { fill: var(--ctor); }
+.row text.virtual { font-style: italic; }
+.row text.static { text-decoration: underline; }
+.row .type { fill: var(--muted); }
+.title-hit { fill: transparent; }
+
+.node.selected .box { stroke: var(--selected); stroke-width: 3; }
+.node.parent .box { stroke: var(--edge-parent); stroke-width: 3; }
+.node.ancestor .box { stroke: var(--edge-parent); stroke-width: 2; stroke-dasharray: 6 3; }
+.node.child .box, .node.descendant .box { stroke: var(--edge-child); stroke-width: 2; }
+.node.match .bg { fill: var(--match); }
+.dim .node.faded { opacity: 0.35; }
+.dim .edge.faded { opacity: 0.18; }
+
+.edge path.line { fill: none; stroke: var(--edge); stroke-width: 1.4; }
+.edge.virtual path.line { stroke-dasharray: 6 4; }
+.edge .hit { fill: none; stroke: transparent; stroke-width: 10; }
+.edge text { fill: var(--muted); font-family: var(--code-font); font-size: 0.85em; dominant-baseline: middle; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.edge.to-parent path.line, .edge.to-ancestor path.line { stroke: var(--edge-parent); stroke-width: 3; }
+.edge.to-ancestor path.line { stroke-width: 2; }
+.edge.to-child path.line { stroke: var(--edge-child); stroke-width: 2.5; }
+.edge.to-parent text, .edge.to-ancestor text { fill: var(--edge-parent); }
+.edge.to-child text { fill: var(--edge-child); }
+
+marker path { stroke-width: 1.4; fill: var(--bg); }
+#m-generalization path { stroke: var(--edge); }
+#arrow-parent path { stroke: var(--edge-parent); }
+#arrow-child path { stroke: var(--edge-child); }
+
+/* High contrast themes: no translucency, solid borders. */
+body.vscode-high-contrast .node .box, body.vscode-high-contrast-light .node .box { stroke: var(--vscode-contrastBorder, var(--fg)); }
+body.vscode-high-contrast .edge.rel-generalization path.line, body.vscode-high-contrast-light .edge.rel-generalization path.line { stroke: var(--fg); }
+body.vscode-high-contrast #m-generalization path, body.vscode-high-contrast-light #m-generalization path { stroke: var(--fg); }
+body.vscode-high-contrast .dim .node.faded, body.vscode-high-contrast-light .dim .node.faded { opacity: 0.55; }
+body.vscode-high-contrast .node.selected .box, body.vscode-high-contrast-light .node.selected .box { stroke: var(--vscode-contrastActiveBorder, var(--selected)); }
+
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* ---------------------------------------------------------------- standalone groups */
+.group .group-frame {
+    fill: var(--vscode-editorWidget-background, var(--node-bg));
+    fill-opacity: 0.45;
+    stroke: var(--node-border);
+    stroke-width: 1.2;
+    stroke-dasharray: 8 4;
+}
+.group .group-header { fill: var(--node-header-bg); cursor: pointer; }
+.group .group-header:hover { fill: var(--hover-row); }
+.group.closed .group-header { fill: transparent; }
+.group.closed .group-frame { fill-opacity: 0.9; cursor: pointer; }
+.group text { fill: var(--fg); font-family: var(--code-font); dominant-baseline: middle; }
+.group .group-count, .group .group-preview { fill: var(--muted); }
+.group .chevron { fill: var(--muted); }
+.group .divider { stroke: var(--node-border); }
+.group.match .group-frame { fill: var(--match); fill-opacity: 1; }
+.dim .group.faded { opacity: 0.35; }
+body.vscode-high-contrast .group .group-frame, body.vscode-high-contrast-light .group .group-frame { stroke: var(--vscode-contrastBorder, var(--fg)); fill-opacity: 1; }
+
+/* ---------------------------------------------------------------- UML relationships */
+.edge.rel-realization path.line { stroke: var(--rel-realization); stroke-dasharray: 7 4; stroke-width: 1.6; }
+.edge.rel-composition path.line { stroke: var(--rel-composition); stroke-width: 1.6; }
+.edge.rel-aggregation path.line { stroke: var(--rel-aggregation); stroke-width: 1.6; }
+.edge.rel-association path.line { stroke: var(--rel-association); stroke-width: 1.6; }
+.edge.rel-dependency path.line { stroke: var(--rel-dependency); stroke-dasharray: 4 4; stroke-width: 1.6; }
+.edge.rel-realization text { fill: var(--rel-realization); }
+.edge.rel-composition text { fill: var(--rel-composition); }
+.edge.rel-aggregation text { fill: var(--rel-aggregation); }
+.edge.rel-association text { fill: var(--rel-association); }
+.edge.rel-dependency text { fill: var(--rel-dependency); }
+.edge.hi path.line { stroke-width: 3.2; }
+.edge.hi text { font-weight: bold; }
+
+#m-realization path { stroke: var(--rel-realization); fill: var(--bg); }
+#m-composition path { stroke: var(--rel-composition); fill: var(--rel-composition); }
+#m-aggregation path { stroke: var(--rel-aggregation); fill: var(--bg); }
+#m-association path { stroke: var(--rel-association); fill: none; stroke-width: 1.6; }
+#m-dependency path { stroke: var(--rel-dependency); fill: none; stroke-width: 1.6; }
+
+.node.related .box { stroke-width: 3; }
+.node.related.rel-realization .box { stroke: var(--rel-realization); }
+.node.related.rel-composition .box { stroke: var(--rel-composition); }
+.node.related.rel-aggregation .box { stroke: var(--rel-aggregation); }
+.node.related.rel-association .box { stroke: var(--rel-association); }
+.node.related.rel-dependency .box { stroke: var(--rel-dependency); }
+
+/* Relations menu */
+.menu-wrap { position: relative; display: inline-flex; }
+.menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 5;
+    min-width: 300px;
+    padding: 6px;
+    background: var(--vscode-menu-background, var(--toolbar-bg));
+    color: var(--vscode-menu-foreground, var(--fg));
+    border: 1px solid var(--vscode-menu-border, var(--node-border));
+    box-shadow: 0 2px 8px var(--shadow);
+    display: grid;
+    gap: 2px;
+}
+.menu[hidden] { display: none; }
+.menu label { display: grid; grid-template-columns: auto 46px 1fr auto; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 3px; cursor: pointer; }
+.menu label:hover { background: var(--vscode-menu-selectionBackground, var(--hover-row)); color: var(--vscode-menu-selectionForeground, var(--fg)); }
+.menu small { color: var(--muted); }
+.menu .count { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
+.menu .menu-actions { display: flex; gap: 6px; padding: 6px 6px 2px; border-top: 1px solid var(--node-border); margin-top: 4px; }
+.menu input[type="checkbox"] { min-height: 0; margin: 0; accent-color: var(--vscode-checkbox-selectBackground, var(--selected)); }
+.sample .s-line { fill: none; stroke-width: 2; }
+.sample .s-head { stroke-width: 1.6; fill: var(--toolbar-bg); }
+.sample .s-head.filled { fill: currentColor; }
+.sample .s-head.open { fill: none; }
+.sample.rel-generalization { color: var(--edge); }
+.sample.rel-realization { color: var(--rel-realization); }
+.sample.rel-composition { color: var(--rel-composition); }
+.sample.rel-aggregation { color: var(--rel-aggregation); }
+.sample.rel-association { color: var(--rel-association); }
+.sample.rel-dependency { color: var(--rel-dependency); }
+.sample .s-line, .sample .s-head { stroke: currentColor; }
+.sample.rel-realization .s-line { stroke-dasharray: 5 3; }
+.sample.rel-dependency .s-line { stroke-dasharray: 4 3; }
+
+/* Access checkboxes (public / protected / private) in the class title */
+.access-toggle { cursor: pointer; }
+.access-toggle .cb-hit { fill: transparent; }
+.access-toggle:hover .cb-hit { fill: var(--hover-row); }
+.access-toggle .cb { fill: var(--vscode-checkbox-background, var(--node-bg)); stroke: var(--vscode-checkbox-border, var(--muted)); stroke-width: 1; }
+.access-toggle.checked .cb { fill: var(--vscode-checkbox-selectBackground, var(--vscode-checkbox-background, var(--node-bg))); stroke: var(--vscode-checkbox-selectBorder, var(--selected)); }
+.access-toggle .cb-check { fill: none; stroke: var(--vscode-checkbox-foreground, var(--fg)); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.node .access-toggle .cb-label { fill: var(--muted); }
+.node .access-toggle.checked .cb-label { fill: var(--fg); }
+.access-toggle.inactive { opacity: 0.45; }
