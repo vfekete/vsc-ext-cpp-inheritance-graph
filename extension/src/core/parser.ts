@@ -152,6 +152,10 @@ class Parser {
                 const cls = this.tryParseClass(template);
                 if (cls !== undefined) this.skipDeclaration();
                 else { this.pos = before; this.skipDeclaration(); }
+            } else if (t === 'enum') {
+                // Definition: parsed; opaque declaration / elaborated use: skipped. Then any declarators.
+                if (this.tryParseEnum() === undefined) this.pos = before;
+                this.skipDeclaration();
             } else {
                 this.skipDeclaration();
             }
@@ -225,6 +229,28 @@ class Parser {
     private parseTypedef(): void {
         this.pos++; // typedef
         const scope = this.currentScopeNames();
+        if (this.peek() === 'enum') {
+            // typedef enum [Tag] {...} Name;
+            const start = this.pos;
+            const e = this.tryParseEnum(true);
+            if (e !== undefined) {
+                const decl: Token[] = [];
+                while (!this.eof() && this.peek() !== ';' && this.peek() !== '}') decl.push(this.toks[this.pos++]);
+                if (this.peek() === ';') this.pos++;
+                const nameTok = decl.find(t => t.kind === 'id');
+                if (e && !e.name && nameTok) {
+                    e.name = nameTok.text;
+                    e.id = [...e.scope, e.name].join('::');
+                    e.loc = this.loc(nameTok);
+                    this.classes.push(e);
+                } else if (e && nameTok && nameTok.text !== e.name) {
+                    const id = [...scope, nameTok.text].join('::');
+                    this.aliases.set(id, { id, target: e.id, scope: [], usingNamespaces: [] });
+                }
+                return;
+            }
+            this.pos = start;
+        }
         if (CLASS_KEYS.has(this.peek() ?? '')) {
             const start = this.pos;
             const cls = this.tryParseClass(undefined, true);
@@ -329,6 +355,93 @@ class Parser {
     }
 
     // ---------------------------------------------------------------- classes
+
+    /**
+     * Parse `enum [class|struct] [attrs] name [: type] { enumerators }` at the current position.
+     * Returns the enum (or null for an unnamed one) when a definition was consumed, or undefined
+     * when this is not an enum definition (opaque declaration, elaborated type specifier).
+     */
+    private tryParseEnum(allowAnonymous = false): ClassInfo | null | undefined {
+        const keyTok = this.toks[this.pos++]; // enum
+        let scoped = false;
+        if (this.peek() === 'class' || this.peek() === 'struct') { scoped = true; this.pos++; }
+        const nameParts: string[] = [];
+        let nameTok: Token | undefined;
+        for (;;) {
+            const t = this.tok();
+            if (!t) return undefined;
+            if (t.text === '[' && this.peek(1) === '[') { this.skipBalanced(); continue; }
+            if (t.kind === 'id' && this.peek(1) === '(') { this.pos++; this.skipBalanced(); continue; } // attribute macros
+            if (t.kind === 'id') {
+                nameParts.length = 0;
+                nameParts.push(t.text);
+                nameTok = t;
+                this.pos++;
+                while (this.peek() === '::' && this.tok(1)?.kind === 'id') {
+                    nameParts.push(this.tok(1)!.text);
+                    nameTok = this.tok(1);
+                    this.pos += 2;
+                }
+                continue;
+            }
+            if (t.text === ':' || t.text === '{') break;
+            return undefined;
+        }
+        let underlyingType: string | undefined;
+        if (this.peek() === ':') {
+            this.pos++;
+            const type: Token[] = [];
+            while (!this.eof() && this.peek() !== '{' && this.peek() !== ';' && this.peek() !== '}') type.push(this.toks[this.pos++]);
+            underlyingType = joinTokens(type) || undefined;
+        }
+        if (this.peek() !== '{') return undefined;
+        this.pos++;
+        const members: MemberInfo[] = [];
+        let cur: Token[] = [];
+        const flush = () => {
+            const toks = stripAttributes(cur);
+            cur = [];
+            const name = toks.find(t => t.kind === 'id');
+            if (!name) return;
+            const eq = toks.findIndex(t => t.text === '=');
+            members.push({
+                name: name.text, kind: 'enumerator', access: 'public', type: '',
+                value: eq >= 0 ? joinTokens(toks.slice(eq + 1)) || undefined : undefined,
+                loc: this.loc(name),
+            });
+        };
+        let depth = 0;
+        while (!this.eof()) {
+            const t = this.tok()!;
+            if (t.text === '}' && depth === 0) break;
+            if (t.text === '(' || t.text === '{' || t.text === '[') depth++;
+            else if (t.text === ')' || t.text === '}' || t.text === ']') depth--;
+            if (t.text === ',' && depth === 0) { flush(); this.pos++; continue; }
+            cur.push(t);
+            this.pos++;
+        }
+        flush();
+        if (this.peek() === '}') this.pos++;
+        const outer = this.currentScopeNames();
+        const scope = [...outer, ...nameParts.slice(0, -1)];
+        const name = nameParts.length ? nameParts[nameParts.length - 1] : '';
+        const e: ClassInfo = {
+            id: name ? [...scope, name].join('::') : '',
+            name,
+            scope,
+            kind: 'enum',
+            isScoped: scoped || undefined,
+            underlyingType,
+            bases: [],
+            members,
+            loc: this.loc(nameTok ?? keyTok),
+            usingNamespaces: this.currentUsings(),
+            sources: ['parser'],
+        };
+        if (!name) return allowAnonymous ? e : null;
+        this.classes.push(e);
+        return e;
+    }
 
     /**
      * Parse `class-key [attrs] name [final] [: bases] { body }` at the current position.
@@ -488,9 +601,15 @@ class Parser {
                     this.parseMember(cls, access);
                 }
             } else if (t === 'enum') {
-                while (!this.eof() && this.peek() !== '{' && this.peek() !== ';' && this.peek() !== '}') this.pos++;
-                if (this.peek() === '{') this.skipBalanced();
-                this.parseMember(cls, access, 'enum');
+                const e = this.tryParseEnum();
+                if (e === undefined) {
+                    // `enum Kind k;` or an opaque declaration: an ordinary member declaration.
+                    this.pos = before;
+                    this.parseMember(cls, access);
+                } else {
+                    // Declarators after the body become fields: `enum class Kind {...} kind;`
+                    this.parseMember(cls, access, e?.name || 'enum');
+                }
             } else if (t === 'friend' || t === 'using' || t === 'typedef' || t === 'static_assert') {
                 this.skipDeclaration();
             } else {

@@ -166,7 +166,8 @@ describe('parser', () => {
         assert.equal(m('x').type, 'float');
         assert.equal(m('y').type, 'float');
         assert.equal(m('operator<').access, 'protected');
-        assert.equal(m('kind').type, 'enum');
+        assert.equal(m('kind').type, 'Kind');
+        assert.ok(classes.find(c => c.id === 'Shape::Kind' && c.kind === 'enum'), 'nested enum is recorded');
         assert.equal(m('nested').type, 'Nested');
         assert.ok(classes.find(c => c.id === 'Shape::Nested'), 'nested class is recorded');
     });

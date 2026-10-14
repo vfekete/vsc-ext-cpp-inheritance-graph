@@ -205,8 +205,12 @@ label.inline { display: inline-flex; align-items: center; gap: 4px; color: var(-
 .node.parent .box { stroke: var(--edge-parent); stroke-width: 3; }
 .node.ancestor .box { stroke: var(--edge-parent); stroke-width: 2; stroke-dasharray: 6 3; }
 .node.child .box, .node.descendant .box { stroke: var(--edge-child); stroke-width: 2; }
-.node.match .bg { fill: var(--match); }
+/* Search matches: the theme's find colours, plus a strong outline so they stand out even when the
+   theme's match background is subtle. */
+.node.name-match .bg { fill: var(--match); }
+.node.match:not(.selected):not(.parent):not(.related) .box { stroke: var(--vscode-editor-findMatchBorder, var(--vscode-charts-yellow, #cca700)); stroke-width: 3; stroke-dasharray: none; }
 .dim .node.faded { opacity: 0.35; }
+.dim .node.faded.match { opacity: 0.85; }
 .dim .edge.faded { opacity: 0.18; }
 
 .edge path.line { fill: none; stroke: var(--edge); stroke-width: 1.4; }
@@ -249,7 +253,8 @@ body.vscode-high-contrast .node.selected .box, body.vscode-high-contrast-light .
 .group .group-count, .group .group-preview { fill: var(--muted); }
 .group .chevron { fill: var(--muted); }
 .group .divider { stroke: var(--node-border); }
-.group.match .group-frame { fill: var(--match); fill-opacity: 1; }
+.group.match .group-frame { stroke: var(--vscode-editor-findMatchBorder, var(--vscode-charts-yellow, #cca700)); stroke-width: 2.5; }
+.group.closed.match .group-frame { fill: var(--match); fill-opacity: 1; }
 .dim .group.faded { opacity: 0.35; }
 body.vscode-high-contrast .group .group-frame, body.vscode-high-contrast-light .group .group-frame { stroke: var(--vscode-contrastBorder, var(--fg)); fill-opacity: 1; }
 
@@ -327,3 +332,14 @@ body.vscode-high-contrast .group .group-frame, body.vscode-high-contrast-light .
 .node .access-toggle .cb-label { fill: var(--muted); }
 .node .access-toggle.checked .cb-label { fill: var(--fg); }
 .access-toggle.inactive { opacity: 0.45; }
+
+/* Enumerations */
+.row .icon.enumerator { fill: var(--vscode-symbolIcon-enumeratorMemberForeground, #75beff); }
+.node.enum .name { fill: var(--vscode-symbolIcon-enumeratorForeground, #ee9d28); }
+
+/* Search: scope selector glued to the box; matching member rows */
+.search-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.search-option { white-space: nowrap; cursor: pointer; }
+.search-option input { min-height: 0; margin: 0; accent-color: var(--vscode-checkbox-selectBackground, var(--selected)); }
+.row.hit .row-bg { fill: var(--match); }
+.row .hit-bar { fill: var(--vscode-editor-findMatchBorder, var(--vscode-charts-yellow, #cca700)); }

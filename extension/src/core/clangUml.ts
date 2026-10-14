@@ -130,6 +130,19 @@ export function convertClangUmlJson(json: any, relativeTo: string): ClassInfo[] 
     for (const e of elements) byId.set(String(e.id), e);
     const classes: ClassInfo[] = [];
     for (const e of elements) {
+        if (e.type === 'enum') {
+            // clang-uml reports enum constants by name only.
+            const loc = toLoc(e.source_location, relativeTo);
+            if (!loc) continue;
+            const id = stripTemplateArgs(String(e.display_name));
+            const parts = id.split('::');
+            classes.push({
+                id, name: parts[parts.length - 1], scope: parts.slice(0, -1), kind: 'enum', bases: [],
+                members: (e.constants ?? []).map((c: string) => ({ name: String(c), kind: 'enumerator' as const, access: 'public' as const, type: '' })),
+                loc, sources: ['clang-uml'],
+            });
+            continue;
+        }
         if (e.type !== 'class' || isInstantiation(e)) continue;
         const loc = toLoc(e.source_location, relativeTo);
         if (!loc) continue;

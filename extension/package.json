@@ -2,7 +2,7 @@
   "name": "cpp-inheritance-graph",
   "displayName": "C++ Inheritance Graph",
   "description": "Interactive, theme-aware visualization of C++ class inheritance for a header file or a whole directory.",
-  "version": "0.6.0",
+  "version": "0.10.0",
   "publisher": "local",
   "license": "MIT",
   "author": "Vladimir Fekete",

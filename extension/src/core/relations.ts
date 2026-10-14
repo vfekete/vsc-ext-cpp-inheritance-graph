@@ -207,7 +207,9 @@ export interface MemberRelation {
 /** All composition / aggregation / association / dependency candidates of a class (names unresolved). */
 export function memberRelations(cls: ClassInfo): MemberRelation[] {
     const out: MemberRelation[] = [];
+    if (cls.kind === 'enum') return out;
     for (const m of cls.members) {
+        if (m.kind === 'enumerator') continue;
         if (m.kind === 'field') {
             const t = parseType(m.type);
             if (!t) continue;

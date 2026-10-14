@@ -242,7 +242,12 @@ export class GraphPanel {
         <div class="menu-actions"><button id="relationsAll">All</button><button id="relationsNone">Inheritance only</button></div>
       </div>
     </span>
-    <input id="search" type="search" placeholder="Find class (/)" aria-label="Find class">
+    <span class="search-wrap">
+      <input id="search" type="search" placeholder="Find class or member (/)" aria-label="Find class or member">
+      <label class="inline search-option" title="Checked: search class, struct, union and enum names only. Unchecked: also member, method and enumerator names, their types, parameters and values.">
+        <input type="checkbox" id="searchNamesOnly"> Only class names
+      </label>
+    </span>
     <span class="spacer"></span>
     <button id="exportPng" title="Download the visible part of the graph as PNG (use Fit first for the whole graph)">⤓ PNG</button>
     <button id="refresh" title="Re-analyze sources">⟳ Refresh</button>
@@ -284,11 +289,13 @@ export class GraphPanel {
       <ul>
         <li><b>Click</b> a class to select it and highlight its parents. With more <b>Relations</b> enabled, its direct counterparts in those relationships (both directions) are highlighted too, in the relationship's colour. Edge labels show the member (<code>+</code>/<code>#</code>/<code>-</code> access) and multiplicity.</li>
         <li><b>Double-click</b> (or <b>Ctrl/Cmd+click</b>) the class title, a method or a field to open its declaration.</li>
+        <li><b>Search</b> finds classes by name and by their content: member, method and enumerator names, types, parameters and values. Check <i>Only class names</i> next to the box to search names only. Matching members are highlighted and revealed even if their section is collapsed, cut off, or hidden by the access checkboxes; <b>Enter</b> jumps to the next matching class.</li>
         <li><b>Drag</b> to pan, <b>wheel</b> / pinch to zoom. Keys: <code>F</code> fit, <code>+</code>/<code>-</code> zoom, <code>0</code> 1:1, arrows pan, <code>C</code> center selection, <code>Enter</code> open selection, <code>/</code> search.</li>
         <li>The ▾ in a class header hides all its members. The ▾ at the top right of the <b>attributes</b> or <b>methods</b> section collapses just that section to a one-line summary (click the summary to expand it again). <b>Alt+click</b> applies it to that section in all classes.</li>
         <li><b>⤓ PNG</b> saves exactly the visible part of the graph. Press <b>Fit</b> first to save the whole graph. The image is scaled so that the smallest text is at least 11 pt (at 96 DPI). Images larger than 16,384 px on a side ask for confirmation.</li>
-        <li>Classes without any inheritance relation are collected in <b>standalone groups</b> (by namespace or folder, see <i>Standalone</i>). Click a group header to expand or collapse it, <b>Alt+click</b> for all groups. Large groups start collapsed; search opens them.</li>
+        <li>Classes without any inheritance relation are collected in <b>standalone groups</b> (by namespace or folder, see <i>Standalone</i>). Click a group header to expand or collapse it, <b>Alt+click</b> for all groups. Large groups start collapsed. While you search, groups that contain matches open, and close again when they no longer match (unless you opened them yourself).</li>
         <li>Member prefixes: <code>+</code> public, <code>#</code> protected, <code>-</code> private; <i>italic</i> = virtual, <u>underlined</u> = static. Members are listed by access (public, protected, private), then alphabetically, with constructors and destructors first.</li>
+        <li>Structs, unions and enumerations are shown too. An <code>enum class</code> or plain <code>enum</code> is a box with the «enum class» or «enumeration» stereotype (with its underlying type) and its enumerators in declaration order. A member whose type is an enum is a composition (see <b>Relations</b>).</li>
         <li>The three checkboxes in a class title (<code>+</code>&nbsp;public, <code>#</code>&nbsp;protected, <code>-</code>&nbsp;private, with member counts) show or hide that class's members of that access level. <b>Alt+click</b> applies to all classes. Static members are always shown.</li>
       </ul>
       <h3 id="diagTitle">Notes</h3>

@@ -35,7 +35,7 @@
     const saved = vscode.getState() || {};
     const state = {
         graph: null,
-        options: Object.assign({ showMembers: 'all', direction: 'TB', highlight: 'parents', navigateOn: 'doubleClick', standalone: 'namespace', relations: { inheritance: true } }, saved.options || {}),
+        options: Object.assign({ showMembers: 'all', direction: 'TB', highlight: 'parents', navigateOn: 'doubleClick', standalone: 'namespace', relations: { inheritance: true }, searchNamesOnly: false }, saved.options || {}),
         /** Edges currently drawn (after the Relations filter), keyed by edge.key. */
         edgeByKey: new Map(),
         visibleEdges: [],
@@ -43,6 +43,11 @@
         groupOpen: Object.assign({}, saved.groupOpen || {}),
         /** Standalone node id -> group key (only while grouping is active). */
         groupOf: new Map(),
+        /** Collapsed groups opened temporarily because they contain search matches. */
+        searchOpened: new Set(),
+        /** Search hits inside classes: node id -> Set of member indexes. */
+        memberHits: new Map(),
+        memberHitsKey: '',
         groups: [],
         /** Absolute boxes of every drawn node (including nodes inside groups). */
         positions: {},
@@ -145,6 +150,7 @@
     const VIS = { public: '+', protected: '#', private: '-' };
 
     function memberLabel(m) {
+        if (m.kind === 'enumerator') return { main: m.name, type: m.value ? `= ${m.value}` : '' };
         if (m.kind === 'field') return { main: m.name, type: m.type ? `: ${m.type}` : '' };
         let main = m.name + (m.params || '()');
         if (m.isConst) main += ' const';
@@ -154,7 +160,7 @@
 
     /** Width reserved at the right of member rows for the section's collapse toggle. */
     const PART_TOGGLE_W = 18;
-    const PART_NAMES = { fields: ['attribute', 'attributes'], methods: ['method', 'methods'] };
+    const PART_NAMES = { fields: ['attribute', 'attributes'], methods: ['method', 'methods'], values: ['enumerator', 'enumerators'] };
 
     function partSummary(c) {
         const [one, many] = PART_NAMES[c.key];
@@ -207,7 +213,8 @@
         if (n.kind === 'unresolved') stereo.push('unresolved');
         if (n.kind === 'templateParam') stereo.push('template parameter');
         if (cls) {
-            if (cls.kind !== 'class') stereo.push(cls.kind);
+            if (cls.kind === 'enum') stereo.push((cls.isScoped ? 'enum class' : 'enumeration') + (cls.underlyingType ? ` : ${cls.underlyingType}` : ''));
+            else if (cls.kind !== 'class') stereo.push(cls.kind);
             if (cls.isAbstract) stereo.push('abstract');
             if (cls.isFinal) stereo.push('final');
             if (outside) stereo.push('external');
@@ -222,22 +229,30 @@
         const collapsed = state.collapsed.has(n.id);
         const compartments = [];
         let hasMembers = false;
+        // Members matching the search are always revealed; where members are hidden as a whole
+        // (collapsed class, Members: Hidden) only the matching ones appear.
+        const hits = state.memberHits.get(n.id);
         if (cls && cls.members.length) {
             hasMembers = opt.showMembers !== 'none';
-            if (opt.showMembers !== 'none' && !collapsed) {
+            const hiddenAll = opt.showMembers === 'none' || collapsed;
+            if (!hiddenAll || hits) {
+                const isEnum = cls.kind === 'enum';
                 const visible = cls.members
                     .map((m, i) => ({ m, i }))
-                    .filter(x => memberShown(n, x.m))
-                    .sort(compareMembers);
-                const fields = visible.filter(x => x.m.kind === 'field');
-                const methods = visible.filter(x => x.m.kind !== 'field');
-                for (const [key, list] of [['fields', fields], ['methods', methods]]) {
+                    .filter(x => (hits && hits.has(x.i)) || (!hiddenAll && memberShown(n, x.m)));
+                // Enumerators keep their declaration order (it defines their values).
+                if (!isEnum) visible.sort(compareMembers);
+                const sections = isEnum
+                    ? [['values', visible]]
+                    : [['fields', visible.filter(x => x.m.kind === 'field')], ['methods', visible.filter(x => x.m.kind !== 'field')]];
+                for (const [key, list] of sections) {
                     if (!list.length) continue;
-                    if (state.collapsedParts.has(n.id + ':' + key)) {
+                    const listHit = !!hits && list.some(x => hits.has(x.i));
+                    if (state.collapsedParts.has(n.id + ':' + key) && !listHit) {
                         compartments.push({ key, rows: [], more: 0, collapsible: false, folded: true, count: list.length });
                         continue;
                     }
-                    const expanded = state.expanded.has(n.id + ':' + key);
+                    const expanded = state.expanded.has(n.id + ':' + key) || listHit;
                     let rows = list;
                     let more = 0;
                     if (list.length > MAX_ROWS && !expanded) {
@@ -250,12 +265,14 @@
         }
 
         // Access checkboxes in the title, while members are shown.
-        const accessRow = hasMembers && !collapsed ? accessRowItems(n) : null;
+        const accessRow = hasMembers && !collapsed && cls.kind !== 'enum' ? accessRowItems(n) : null;
 
         // Width (rows keep PART_TOGGLE_W free on the right for the section toggle)
         const iconSpace = 26;
         let w = accessRow ? accessRow.width + 2 * M.pad : 0;
-        for (const h of header) w = Math.max(w, textWidth(h.text, h) + 2 * M.pad + (h.cls.startsWith('name') ? 36 : 0));
+        // The first line shares the top row with the ▾ toggle; the name line is kept clear of it too.
+        header.forEach((h, i) => { h.clearOfToggle = i === 0 || h.cls.startsWith('name'); });
+        for (const h of header) w = Math.max(w, textWidth(h.text, h) + 2 * M.pad + (h.clearOfToggle ? 2 * 36 : 0));
         for (const c of compartments) {
             if (c.folded) w = Math.max(w, textWidth(partSummary(c), { size: M.small, italic: true }) + iconSpace + 2 * M.pad + PART_TOGGLE_W);
             for (const { m } of c.rows) {
@@ -379,7 +396,10 @@
         }
         const groups = [...byKey.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([key, list]) => {
             list.sort((a, b) => a.label.localeCompare(b.label));
-            return { key, ids: list.map(n => n.id), labels: list.map(n => n.label), open: isGroupOpen(key, list.length) };
+            return {
+                key, ids: list.map(n => n.id), labels: list.map(n => n.label),
+                open: isGroupOpen(key, list.length) || state.searchOpened.has(key),
+            };
         });
         groups.forEach(sizeGroup);
         return groups;
@@ -556,6 +576,7 @@
     function drawNode(v, pos) {
         const n = v.node;
         const classes = ['node', n.kind];
+        if (n.cls && n.cls.kind === 'enum') classes.push('enum');
         if (n.isSeed) classes.push('seed');
         if (v.outside) classes.push('outside');
         const g = el('g', { class: classes.join(' '), 'data-id': n.id, transform: `translate(${pos.x},${pos.y})` }, nodesLayer);
@@ -574,7 +595,8 @@
         let y = 6;
         for (const line of v.header) {
             const lh = v.lineH(line);
-            const maxW = w - 2 * M.pad - (line.cls.startsWith('name') ? 36 : 0);
+            // Centred text: keep the same margin on both sides of the ▾ toggle area.
+            const maxW = w - 2 * M.pad - (line.clearOfToggle ? 2 * 36 : 0);
             el('text', {
                 class: line.cls,
                 x: w / 2, y: y + lh / 2, 'text-anchor': 'middle',
@@ -659,14 +681,18 @@
 
     function drawRow(g, v, m, index, y) {
         const w = v.w;
-        const row = el('g', { class: 'row', 'data-mi': index }, g);
+        const hitSet = state.memberHits.get(v.id);
+        const isHit = !!hitSet && hitSet.has(index);
+        const row = el('g', { class: 'row' + (isHit ? ' hit' : ''), 'data-mi': index }, g);
         el('rect', { class: 'row-bg', x: 1, y, width: w - 2, height: M.row }, row);
+        if (isHit) el('rect', { class: 'hit-bar', x: 1, y: y + 1, width: 3, height: M.row - 2 }, row);
         const cy = y + M.row / 2;
         const ix = M.pad + 5;
-        const kindCls = m.kind === 'field' ? 'field' : m.kind === 'constructor' || m.kind === 'destructor' ? 'ctor' : 'method';
-        if (kindCls === 'field') el('rect', { class: `icon ${kindCls}`, x: ix - 4, y: cy - 4, width: 8, height: 8, rx: 1 }, row);
+        const kindCls = m.kind === 'enumerator' ? 'enumerator' : m.kind === 'field' ? 'field' : m.kind === 'constructor' || m.kind === 'destructor' ? 'ctor' : 'method';
+        if (kindCls === 'enumerator') el('rect', { class: 'icon enumerator', x: ix - 5, y: cy - 3.5, width: 10, height: 7, rx: 3.5 }, row);
+        else if (kindCls === 'field') el('rect', { class: `icon ${kindCls}`, x: ix - 4, y: cy - 4, width: 8, height: 8, rx: 1 }, row);
         else el('path', { class: `icon ${kindCls}`, d: `M${ix},${cy - 5} L${ix + 5},${cy} L${ix},${cy + 5} L${ix - 5},${cy} Z` }, row);
-        el('text', { class: 'vis', x: ix + 9, y: cy, 'font-size': M.size }, row, VIS[m.access] || ' ');
+        if (m.kind !== 'enumerator') el('text', { class: 'vis', x: ix + 9, y: cy, 'font-size': M.size }, row, VIS[m.access] || ' ');
         const l = memberLabel(m);
         const x0 = M.pad + v.iconSpace;
         const avail = w - x0 - M.pad - PART_TOGGLE_W;
@@ -680,7 +706,7 @@
             el('tspan', null, t, ellipsize(full, avail, { italic: m.isVirtual }));
         }
         const flags = [m.isStatic ? 'static' : '', m.isVirtual ? 'virtual' : '', m.isOverride ? 'override' : '', m.isPure ? 'pure virtual' : ''].filter(Boolean).join(', ');
-        el('title', null, row, `${m.access} ${m.kind}${flags ? ` (${flags})` : ''}\n${full}` +
+        el('title', null, row, `${m.kind === 'enumerator' ? '' : m.access + ' '}${m.kind}${flags ? ` (${flags})` : ''}\n${full}` +
             (m.loc ? `\n${relPath(m.loc.file)}:${m.loc.line + 1}` : ''));
     }
 
@@ -896,8 +922,14 @@
             const key = groupHit.closest('.group').dataset.group;
             const gr = state.groups.find(x => x.key === key);
             const open = !(gr && gr.open);
-            if (e.altKey) state.groups.forEach(x => setGroupOpen(x.key, open));
-            else setGroupOpen(key, open);
+            // An explicit click takes over from the search's temporary opening.
+            if (e.altKey) {
+                state.groups.forEach(x => setGroupOpen(x.key, open));
+                state.searchOpened.clear();
+            } else {
+                setGroupOpen(key, open);
+                state.searchOpened.delete(key);
+            }
             persist();
             render(true);
             return;
@@ -955,22 +987,81 @@
 
     // ------------------------------------------------------------------ search
 
-    function applySearch(jump) {
-        const q = $('search').value.trim().toLowerCase();
-        nodesLayer.querySelectorAll('.node.match').forEach(n => n.classList.remove('match'));
-        groupsLayer.querySelectorAll('.group.match').forEach(n => n.classList.remove('match'));
-        state.matches = [];
-        if (!q || !state.graph) { updateStatus(); return; }
+    function matchesQuery(n, q) {
+        return n.qualifiedName.toLowerCase().includes(q) || n.label.toLowerCase().includes(q);
+    }
+
+    /** Does a member match? Scope 'members': its name; 'signatures': also type, parameters, value. */
+    function memberMatches(m, q, scope) {
+        if (m.name.toLowerCase().includes(q)) return true;
+        if (scope !== 'signatures') return false;
+        return `${m.type || ''} ${m.params || ''} ${m.value || ''}`.toLowerCase().includes(q);
+    }
+
+    /** Classes matching the query (by name or by content) and the matching members per class. */
+    function computeSearch(q) {
+        const classes = [];
+        const hits = new Map();
+        if (!q || !state.graph) return { classes, hits };
+        // "Only class names" off: names, members and their signatures (types, parameters, values).
+        const scope = state.options.searchNamesOnly ? 'names' : 'signatures';
         for (const n of state.graph.nodes) {
             if (!state.views.has(n.id)) continue; // hidden by the Relations filter
-            if (n.qualifiedName.toLowerCase().includes(q) || n.label.toLowerCase().includes(q)) state.matches.push(n.id);
+            let set = null;
+            if (scope !== 'names' && n.cls) {
+                n.cls.members.forEach((m, i) => { if (memberMatches(m, q, scope)) (set || (set = new Set())).add(i); });
+            }
+            if (set) hits.set(n.id, set);
+            if (set || matchesQuery(n, q)) classes.push(n.id);
         }
+        return { classes, hits };
+    }
+
+    /**
+     * Open collapsed groups that contain matching classes, and close again the ones the search
+     * opened earlier that no longer contain any. Groups opened by the user are untouched.
+     * Returns true when the set changed (the graph then has to be re-rendered).
+     */
+    function syncSearchGroups(matchIds) {
+        const wanted = new Set();
+        for (const id of matchIds) {
+            const key = state.groupOf.get(id);
+            const gr = key !== undefined && state.groups.find(x => x.key === key);
+            if (gr && !isGroupOpen(key, gr.ids.length)) wanted.add(key);
+        }
+        const same = wanted.size === state.searchOpened.size && [...wanted].every(k => state.searchOpened.has(k));
+        if (same) return false;
+        state.searchOpened = wanted;
+        return true;
+    }
+
+    function applySearch(jump) {
+        const q = $('search').value.trim().toLowerCase();
+        const { classes, hits } = computeSearch(q);
+        const hitsKey = [...hits].map(([id, set]) => `${id}:${[...set].join(',')}`).join('|');
+        const groupsChanged = syncSearchGroups(classes);
+        if (groupsChanged || hitsKey !== state.memberHitsKey) {
+            // Revealed members and opened groups change the layout (render calls applySearch(false) again).
+            state.memberHits = hits;
+            state.memberHitsKey = hitsKey;
+            render(true);
+        }
+        nodesLayer.querySelectorAll('.node.match').forEach(n => n.classList.remove('match', 'name-match'));
+        groupsLayer.querySelectorAll('.group.match').forEach(n => n.classList.remove('match'));
+        state.matches = classes;
+        state.memberMatchCount = [...hits.values()].reduce((a, set) => a + set.size, 0);
+        if (!q || !state.graph) { updateStatus(); return; }
         state.matches.forEach(id => {
             const nodeEl = nodesLayer.querySelector(`.node[data-id="${cssEscape(id)}"]`);
-            if (nodeEl) nodeEl.classList.add('match');
-            // Matches inside a collapsed group mark the group.
+            if (nodeEl) {
+                nodeEl.classList.add('match');
+                // The whole box is tinted only for a name match; content matches tint just their rows.
+                const n = state.views.get(id).node;
+                if (matchesQuery(n, q)) nodeEl.classList.add('name-match');
+            }
+            // Mark the group that contains a match as well.
             const key = state.groupOf.get(id);
-            if (!nodeEl && key !== undefined) {
+            if (key !== undefined) {
                 const gEl = groupsLayer.querySelector(`.group[data-group="${cssEscape(key)}"]`);
                 if (gEl) gEl.classList.add('match');
             }
@@ -978,13 +1069,6 @@
         if (jump && state.matches.length) {
             state.matchIndex = (state.matchIndex + 1) % state.matches.length;
             const id = state.matches[state.matchIndex];
-            const key = state.groupOf.get(id);
-            const gr = key !== undefined && state.groups.find(x => x.key === key);
-            if (gr && !gr.open) {
-                setGroupOpen(key, true);
-                persist();
-                render(true);
-            }
             select(id);
             centerOn(id);
         }
@@ -1188,7 +1272,11 @@
                     : `${state.standaloneCount} standalone`);
         }
         if (state.partial) parts.push('refining with clang-uml…');
-        if (state.matches.length) parts.push(`${state.matches.length} match${state.matches.length === 1 ? '' : 'es'}`);
+        if (state.matches.length) {
+            const mm = state.memberMatchCount || 0;
+            parts.push(`${state.matches.length} class${state.matches.length === 1 ? '' : 'es'} match` +
+                (mm ? ` (${mm} member${mm === 1 ? '' : 's'})` : ''));
+        }
         if (state.selected && state.views.has(state.selected)) parts.push(`selected: ${state.views.get(state.selected).node.qualifiedName}`);
         $('status').textContent = parts.join(' · ');
         const diag = $('diagButton');
@@ -1303,7 +1391,21 @@
         bindSelect('standalone', 'standalone', true, true);
         bindRelationsMenu();
         const search = $('search');
-        search.addEventListener('input', () => { state.matchIndex = -1; applySearch(false); });
+        // Debounced: member matches can change box sizes and therefore the layout.
+        let searchTimer = 0;
+        search.addEventListener('input', () => {
+            state.matchIndex = -1;
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => applySearch(false), 120);
+        });
+        const namesOnly = $('searchNamesOnly');
+        namesOnly.checked = !!state.options.searchNamesOnly;
+        namesOnly.addEventListener('change', () => {
+            state.options.searchNamesOnly = namesOnly.checked;
+            persist();
+            state.matchIndex = -1;
+            applySearch(false);
+        });
         search.addEventListener('keydown', e => {
             if (e.key === 'Enter') { e.preventDefault(); applySearch(true); }
             if (e.key === 'Escape') { search.value = ''; applySearch(false); svg.focus(); }
@@ -1402,6 +1504,7 @@
                 $('members').value = state.options.showMembers;
                 $('highlight').value = state.options.highlight;
                 $('standalone').value = state.options.standalone;
+                $('searchNamesOnly').checked = !!state.options.searchNamesOnly;
                 syncRelationsMenu();
                 showOverlay(null);
                 if (!msg.graph.nodes.length) showOverlay('message', 'No classes found.' + (msg.graph.diagnostics.length ? ' See notes (ⓘ).' : ''));

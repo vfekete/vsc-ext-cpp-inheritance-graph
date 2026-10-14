@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.0
+
+- The search scope selector is replaced by an **Only class names** checkbox: checked searches class / struct / union / enum names only, unchecked (default) searches names and all content (members, methods, enumerators, their types, parameters and values).
+
+## 0.9.0
+
+- Search also looks inside classes / structs / unions / enums: member, method and enumerator names (scope *+ Members*, default) or also their types, parameters and values (*+ Signatures*); *Names* restores name-only search.
+- Matching members are highlighted and temporarily revealed even when hidden (collapsed section or class, "… more" cut-off, access checkboxes, Members: Hidden); groups containing them open. Everything is restored when the search changes.
+- Only name matches tint the whole class box; content matches tint just the matching rows.
+
+## 0.8.0
+
+- Searching opens collapsed standalone groups (namespaces / folders) that contain matches as you type, and closes them again when they no longer match; groups opened by the user stay open.
+- Search matches have a bold outline in the theme's find colour and stay visible while another class is selected.
+
+## 0.7.0
+
+- Enumerations: `enum class` / `enum struct` / plain `enum` (also nested in classes and C-style `typedef enum`) are shown as their own boxes with «enum class : type» / «enumeration» stereotype and enumerators (with explicit values) in declaration order. Members of an enum type are compositions. clang-uml enums are merged too.
+- Structs and unions are documented as first-class citizens (they were already parsed like classes).
+- The first title line (e.g. a long stereotype) no longer runs under the ▾ toggle.
+
 ## 0.6.0
 
 - Members are sorted by access (public, protected, private), constructors/destructors first, then alphabetically.

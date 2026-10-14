@@ -9,7 +9,7 @@ export interface SourceLoc {
 
 export type Access = 'public' | 'protected' | 'private';
 
-export type MemberKind = 'field' | 'method' | 'constructor' | 'destructor' | 'operator';
+export type MemberKind = 'field' | 'method' | 'constructor' | 'destructor' | 'operator' | 'enumerator';
 
 export interface MemberInfo {
     name: string;
@@ -24,6 +24,8 @@ export interface MemberInfo {
     isPure?: boolean;
     isConst?: boolean;
     isOverride?: boolean;
+    /** Explicit value of an enumerator (`= 4`). */
+    value?: string;
     loc?: SourceLoc;
 }
 
@@ -40,7 +42,7 @@ export interface BaseSpec {
     resolvedId?: string;
 }
 
-export type ClassKind = 'class' | 'struct' | 'union';
+export type ClassKind = 'class' | 'struct' | 'union' | 'enum';
 
 export interface ClassInfo {
     /** Fully qualified name without template arguments, e.g. `ui::widgets::ValueControl`. */
@@ -55,6 +57,10 @@ export interface ClassInfo {
     /** Names of the template parameters (used to recognise `class X : public T`). */
     templateParamNames?: string[];
     isFinal?: boolean;
+    /** `enum class` / `enum struct` (only for kind 'enum'). */
+    isScoped?: boolean;
+    /** Underlying type of an enum (`enum class E : std::uint8_t`). */
+    underlyingType?: string;
     isAbstract?: boolean;
     bases: BaseSpec[];
     members: MemberInfo[];
